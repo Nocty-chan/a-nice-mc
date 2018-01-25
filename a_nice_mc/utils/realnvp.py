@@ -28,7 +28,7 @@ class NVPLayer(Layer):
             t = self.add(x, v_dim, 'translate', reuse=self.reuse)
             s = self.add(x, v_dim, 'scale', reuse=self.reuse)
             v = tf.multiply(v, tf.exp(s)) + t
-            return [x, v], tf.exp(tf.reduce_sum(s, 1))
+            return [x, v], tf.reduce_sum(s, 1)
 
     def backward(self, inputs):
         x, v, = inputs
@@ -42,7 +42,7 @@ class NVPLayer(Layer):
             t = self.add(x, v_dim, 'translate', reuse=True)
             s = self.add(x, v_dim, 'scale', reuse=True)
             v = tf.multiply(v - t, tf.exp(-s))
-            return [x, v], tf.exp(-tf.reduce_sum(s, 1))
+            return [x, v], -tf.reduce_sum(s, 1)
 
     def add(self, x, dx, name, reuse=False):
         dims = None

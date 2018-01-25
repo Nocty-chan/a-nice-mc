@@ -20,7 +20,8 @@ class Trainer(object):
     def __init__(self,
                  network, energy_fn, discriminator,
                  noise_sampler,
-                 b, m, eta=1.0, scale=10.0):
+                 b, m, eta=1.0, scale=10.0, mode='a-nice'):
+        self.mode = mode
         self.energy_fn = energy_fn
         self.logger = create_logger(__name__)
         self.train_op = TrainingOperator(network)
@@ -122,7 +123,7 @@ class Trainer(object):
         self.sess.run(self.init_op)
         self.ns = noise_sampler
         self.ds = None
-        self.path = 'logs/' + energy_fn.name
+        self.path = 'logs/' + self.mode +'_' + energy_fn.name
         try:
             os.makedirs(self.path)
         except OSError:
@@ -133,8 +134,8 @@ class Trainer(object):
         z, v = self.sess.run([self.z_, self.v_], feed_dict={
             self.z: self.ns(batch_size), self.steps: steps, self.nice_steps: nice_steps})
         end = time.time()
-        self.logger.info('A-NICE-MC: batches [%d] steps [%d : %d] time [%5.4f] samples/s [%5.4f]' %
-                         (batch_size, steps, nice_steps, end - start, (batch_size * steps) / (end - start)))
+        self.logger.info('%s: batches [%d] steps [%d : %d] time [%5.4f] samples/s [%5.4f]' %
+                         (self.mode, batch_size, steps, nice_steps, end - start, (batch_size * steps) / (end - start)))
         z = np.transpose(z, axes=[1, 0, 2])
         v = np.transpose(v, axes=[1, 0, 2])
         return z, v

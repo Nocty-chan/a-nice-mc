@@ -28,5 +28,5 @@ if __name__ == '__main__':
         ]
     )
 
-    trainer = Trainer(generator, energy_fn, discriminator, noise_sampler, b=8, m=2)
+    trainer = Trainer(generator, energy_fn, discriminator, noise_sampler, b=8, m=2, mode='real-nvp')
     trainer.train()

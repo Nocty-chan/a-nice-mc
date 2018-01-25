@@ -83,14 +83,18 @@ class NiceNetwork(object):
 
     def forward(self, inputs):
         x = inputs
+        logdet = 0.0
         for layer in self.layers:
-            x, _ = layer.forward(x)
+            x, j = layer.forward(x)
+            logdet+=j
         return x
 
     def backward(self, inputs):
         x = inputs
+        logdet = 0.0
         for layer in reversed(self.layers):
-            x, _ = layer.backward(x)
+            x, j = layer.backward(x)
+            logdet+=j
         return x
 
     def __call__(self, x, is_backward):
