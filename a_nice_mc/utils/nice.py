@@ -87,7 +87,7 @@ class NiceNetwork(object):
         for layer in self.layers:
             x, j = layer.forward(x)
             logdet+=j
-        return x
+        return x, logdet
 
     def backward(self, inputs):
         x = inputs
@@ -95,7 +95,7 @@ class NiceNetwork(object):
         for layer in reversed(self.layers):
             x, j = layer.backward(x)
             logdet+=j
-        return x
+        return x, logdet
 
     def __call__(self, x, is_backward):
         return tf.cond(
@@ -120,7 +120,7 @@ class TrainingOperator(object):
             """
             z, v = zv
             v = tf.random_normal(shape=tf.stack([tf.shape(z)[0], self.network.v_dim]))
-            z_, v_ = self.network.forward([z, v])
+            (z_, v_), _ = self.network.forward([z, v])
             return z_, v_
 
         elems = tf.zeros([steps])
@@ -143,7 +143,7 @@ class InferenceOperator(object):
             :return: next state `z_`, and the corresponding auxiliary variable `v_' (without MH).
             """
             z, v = zv
-            z_, v_ = self.network([z, v], is_backward=(x < 0.5)) #(tf.random_uniform([]) < 0.5))
+            (z_, v_), _ = self.network([z, v], is_backward=(x < 0.5)) #(tf.random_uniform([]) < 0.5))
             return z_, v_
 
         def fn(zv, x):
