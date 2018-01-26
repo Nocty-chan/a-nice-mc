@@ -76,6 +76,7 @@ class NiceNetwork(object):
     def __init__(self, x_dim, v_dim):
         self.layers = []
         self.x_dim, self.v_dim = x_dim, v_dim
+        self.logdet = 0.0
 
     def append(self, layer):
         layer.create_variables(self.x_dim, self.v_dim)
@@ -83,19 +84,19 @@ class NiceNetwork(object):
 
     def forward(self, inputs):
         x = inputs
-        logdet = 0.0
+        self.logdet = 0.0
         for layer in self.layers:
             x, j = layer.forward(x)
-            logdet+=j
-        return x, logdet
+            self.logdet+=j
+        return x
 
     def backward(self, inputs):
         x = inputs
-        logdet = 0.0
+        self.logdet = 0.0
         for layer in reversed(self.layers):
             x, j = layer.backward(x)
-            logdet+=j
-        return x, logdet
+            self.logdet-=j
+        return x
 
     def __call__(self, x, is_backward):
         return tf.cond(
@@ -120,7 +121,7 @@ class TrainingOperator(object):
             """
             z, v = zv
             v = tf.random_normal(shape=tf.stack([tf.shape(z)[0], self.network.v_dim]))
-            (z_, v_), _ = self.network.forward([z, v])
+            z_, v_ = self.network.forward([z, v])
             return z_, v_
 
         elems = tf.zeros([steps])
@@ -133,7 +134,7 @@ class InferenceOperator(object):
         self.energy_fn = energy_fn
 
     def __call__(self, inputs, steps, nice_steps=1):
-        def nice_proposal(zvd, x):
+        def nice_proposal(zv, x):
             """
             Nice Proposal (without Metropolis-Hastings).
             `z` is the input state.
@@ -142,9 +143,9 @@ class InferenceOperator(object):
             :param x:
             :return: next state `z_`, and the corresponding auxiliary variable `v_' (without MH).
             """
-            z, v, d = zvd
-            (z_, v_), d_ = self.network([z, v], is_backward=(x < 1.0 / (1.0 + d))) #(tf.random_uniform([]) < 0.5))
-            return z_, v_, tf.exp(d_)
+            z, v = zv
+            z_, v_ = self.network([z, v], is_backward=(x < 1.0 / (1.0 + tf.exp(self.network.logdet)))) #(tf.random_uniform([]) < 0.5))
+            return z_, v_
 
         def fn(zv, x):
             """
@@ -158,7 +159,7 @@ class InferenceOperator(object):
             z, v = zv
             v = tf.random_normal(shape=tf.stack([tf.shape(z)[0], self.network.v_dim]))
             # z_, v_ = self.network([z, v], is_backward=(tf.random_uniform([]) < 0.5))
-            z_, v_, _ = tf.scan(nice_proposal, x * tf.random_uniform([]), (z, v, 1.0), back_prop=False)
+            z_, v_ = tf.scan(nice_proposal, x * tf.random_uniform([]), (z, v), back_prop=False)
             z_, v_ = z_[-1], v_[-1]
             ep = hamiltonian(z, v, self.energy_fn)
             en = hamiltonian(z_, v_, self.energy_fn)
