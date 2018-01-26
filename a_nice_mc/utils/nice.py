@@ -133,7 +133,7 @@ class InferenceOperator(object):
         self.energy_fn = energy_fn
 
     def __call__(self, inputs, steps, nice_steps=1):
-        def nice_proposal(zv, x):
+        def nice_proposal(zvd, x):
             """
             Nice Proposal (without Metropolis-Hastings).
             `z` is the input state.
@@ -142,9 +142,9 @@ class InferenceOperator(object):
             :param x:
             :return: next state `z_`, and the corresponding auxiliary variable `v_' (without MH).
             """
-            z, v = zv
-            (z_, v_), _ = self.network([z, v], is_backward=(x < 0.5)) #(tf.random_uniform([]) < 0.5))
-            return z_, v_
+            z, v, d = zvd
+            (z_, v_), d_ = self.network([z, v], is_backward=(x < 1.0 / (1.0 + d))) #(tf.random_uniform([]) < 0.5))
+            return z_, v_, tf.exp(d_)
 
         def fn(zv, x):
             """
@@ -158,7 +158,7 @@ class InferenceOperator(object):
             z, v = zv
             v = tf.random_normal(shape=tf.stack([tf.shape(z)[0], self.network.v_dim]))
             # z_, v_ = self.network([z, v], is_backward=(tf.random_uniform([]) < 0.5))
-            z_, v_ = tf.scan(nice_proposal, x * tf.random_uniform([]), (z, v), back_prop=False)
+            z_, v_, _ = tf.scan(nice_proposal, x * tf.random_uniform([]), (z, v, 1.0), back_prop=False)
             z_, v_ = z_[-1], v_[-1]
             ep = hamiltonian(z, v, self.energy_fn)
             en = hamiltonian(z_, v_, self.energy_fn)
