@@ -22,7 +22,7 @@ def hamiltonian(p, v, f):
     return f(p) + kinetic_energy(v)
 
 
-def metropolis_hastings_accept(energy_prev, energy_next):
+def metropolis_hastings_accept(energy_prev, energy_next, jacobian):
     """
     Run Metropolis-Hastings algorithm for 1 step
     :param energy_prev:
@@ -30,7 +30,7 @@ def metropolis_hastings_accept(energy_prev, energy_next):
     :return: Tensor of boolean values, indicating accept or reject
     """
     energy_diff = energy_prev - energy_next
-    return (tf.exp(energy_diff) - tf.random_uniform(tf.shape(energy_prev))) >= 0.0
+    return (tf.exp(energy_diff + 2 * jacobian) - tf.random_uniform(tf.shape(energy_prev))) >= 0.0
 
 
 def simulate_dynamics(initial_pos, initial_vel, stepsize, n_steps, energy_fn):

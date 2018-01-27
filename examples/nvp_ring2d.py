@@ -13,7 +13,7 @@ if __name__ == '__main__':
     from a_nice_mc.objectives.expression.ring2d import Ring2d
     from a_nice_mc.models.discriminator import MLPDiscriminator
     from a_nice_mc.models.generator import create_nvp_network
-    from a_nice_mc.train.wgan_nll import Trainer
+    from a_nice_mc.train.wgan_nll_nvp import Trainer
 
     os.environ['CUDA_VISIBLE_DEVICES'] = ''
 

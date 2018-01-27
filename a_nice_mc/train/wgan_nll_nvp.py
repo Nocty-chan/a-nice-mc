@@ -65,7 +65,7 @@ class Trainer(object):
         #
         # The optimal case is achieved when x1, x2, x3
         # are all from the data distribution
-        x_ = tf.concat([
+        self.x_t = tf.concat([
                 tf.concat([x2_, self.x], 1),
                 tf.concat([x3_, x1_], 1)
         ], 0)
@@ -75,23 +75,23 @@ class Trainer(object):
         v2_ = v2_[-1]
         v3_ = v3_[-1]
         v_ = tf.concat([v1_, v2_, v3_], 0)
-        v_ = tf.reshape(v_, [-1, self.v_dim])
+        self.v_t = tf.reshape(v_, [-1, self.v_dim])
 
         d = discriminator(x, reuse=False)
-        d_ = discriminator(x_)
+        d_ = discriminator(self.x_t)
 
         # generator loss
 
         # TODO: MMD loss (http://szhao.me/2017/06/10/a-tutorial-on-mmd-variational-autoencoders.html)
         # it is easy to implement, but maybe we should wait after this codebase is settled.
-        self.v_loss = tf.reduce_mean(0.5 * tf.multiply(v_, v_))
+        self.v_loss = tf.reduce_mean(0.5 * tf.multiply(self.v_t, self.v_t))
         self.g_loss = tf.reduce_mean(d_) + self.v_loss * eta
-
+        # self.g_loss = tf.reduce_mean(d_)
         # discriminator loss
         self.d_loss = tf.reduce_mean(d) - tf.reduce_mean(d_)
 
         epsilon = tf.random_uniform([], 0.0, 1.0)
-        x_hat = xl * epsilon + x_ * (1 - epsilon)
+        x_hat = xl * epsilon + self.x_t * (1 - epsilon)
         d_hat = discriminator(x_hat)
         ddx = tf.gradients(d_hat, x_hat)[0]
         ddx = tf.norm(ddx, axis=1)
@@ -104,9 +104,9 @@ class Trainer(object):
         g_vars = [var for var in tf.global_variables() if 'generator' in var.name]
         d_vars = [var for var in tf.global_variables() if discriminator.name in var.name]
 
-        self.d_train = tf.train.AdamOptimizer(learning_rate=5e-4, beta1=0.5, beta2=0.9)\
+        self.d_train = tf.train.AdamOptimizer(learning_rate=5e-6, beta1=0.5, beta2=0.9)\
             .minimize(self.d_loss, var_list=d_vars)
-        self.g_train = tf.train.AdamOptimizer(learning_rate=5e-4, beta1=0.5, beta2=0.9)\
+        self.g_train = tf.train.AdamOptimizer(learning_rate=5e-6, beta1=0.5, beta2=0.9)\
             .minimize(self.g_loss, var_list=g_vars)
 
         self.init_op = tf.group(
@@ -188,7 +188,7 @@ class Trainer(object):
                 self.energy_fn.evaluate([z, v], path=self.path)
                 # TODO: save model
             if t % log_freq == 0:
-                d_loss = self.sess.run(self.d_loss, feed_dict=_feed_dict(batch_size))
+                d_loss, v_train = self.sess.run([self.d_loss, self.x_t], feed_dict=_feed_dict(batch_size))
                 g_loss, v_loss = self.sess.run([self.g_loss, self.v_loss], feed_dict=_feed_dict(batch_size))
                 self.logger.info('Iter [%d] time [%5.4f] d_loss [%.4f] g_loss [%.4f] v_loss [%.4f]' %
                                  (t, train_time, d_loss, g_loss, v_loss))
