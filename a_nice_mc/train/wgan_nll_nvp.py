@@ -86,7 +86,6 @@ class Trainer(object):
         # it is easy to implement, but maybe we should wait after this codebase is settled.
         self.v_loss = tf.reduce_mean(0.5 * tf.multiply(self.v_t, self.v_t))
         self.g_loss = tf.reduce_mean(d_) + self.v_loss * eta
-        # self.g_loss = tf.reduce_mean(d_)
         # discriminator loss
         self.d_loss = tf.reduce_mean(d) - tf.reduce_mean(d_)
 
@@ -104,9 +103,9 @@ class Trainer(object):
         g_vars = [var for var in tf.global_variables() if 'generator' in var.name]
         d_vars = [var for var in tf.global_variables() if discriminator.name in var.name]
 
-        self.d_train = tf.train.AdamOptimizer(learning_rate=5e-6, beta1=0.5, beta2=0.9)\
+        self.d_train = tf.train.AdamOptimizer(learning_rate=5e-5, beta1=0.5, beta2=0.9)\
             .minimize(self.d_loss, var_list=d_vars)
-        self.g_train = tf.train.AdamOptimizer(learning_rate=5e-6, beta1=0.5, beta2=0.9)\
+        self.g_train = tf.train.AdamOptimizer(learning_rate=5e-5, beta1=0.5, beta2=0.9)\
             .minimize(self.g_loss, var_list=g_vars)
 
         self.init_op = tf.group(

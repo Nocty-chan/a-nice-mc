@@ -12,19 +12,19 @@ def noise_sampler(bs):
 if __name__ == '__main__':
     from a_nice_mc.objectives.expression.ring2d import Ring2d
     from a_nice_mc.models.discriminator import MLPDiscriminator
-    from a_nice_mc.models.generator import create_nvp_network
+    from a_nice_mc.models.generator import create_mixed_network
     from a_nice_mc.train.wgan_nll_nvp import Trainer
 
     os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
     energy_fn = Ring2d(display=False)
     discriminator = MLPDiscriminator([400, 400, 400])
-    generator = create_nvp_network(
+    generator = create_mixed_network(
         2, 2,
         [
-            ([400],[400], 'v1', False),
+            ([400], None, 'v1', False),
             ([400],[400], 'x1', True),
-            ([400],[400], 'v2', False),
+            ([400], None, 'v2', False),
         ]
     )
 
