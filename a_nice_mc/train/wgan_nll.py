@@ -6,7 +6,7 @@ import tensorflow as tf
 from a_nice_mc.utils.bootstrap import Buffer
 from a_nice_mc.utils.logger import create_logger
 from a_nice_mc.utils.nice import TrainingOperator, InferenceOperator
-
+from a_nice_mc.utils.summary import variable_summaries, variable_stats
 
 class Trainer(object):
     """
@@ -41,7 +41,8 @@ class Trainer(object):
         # Obtain values from inference ops
         # `infer_op` contains Metropolis step
         v = tf.random_normal(tf.stack([bz, self.v_dim]))
-        self.z_, self.v_ = self.infer_op((self.z, v), self.steps, self.nice_steps)
+        j = tf.zeros([tf.shape(self.z)[0]])
+        self.z_, self.v_, self.j_ = self.infer_op((self.z, v, j), self.steps, self.nice_steps)
 
         # Reshape for pairwise discriminator
         x = tf.reshape(self.x, [-1, 2 * self.x_dim])
@@ -120,25 +121,44 @@ class Trainer(object):
             intra_op_parallelism_threads=1,
             gpu_options=gpu_options,
         ))
-        self.saver = tf.train.Saver()
-        self.sess.run(self.init_op)
-        self.ns = noise_sampler
-        self.ds = None
+
         self.path = 'logs/' + self.mode +'_' + energy_fn.name
         try:
             os.makedirs(self.path)
         except OSError:
             pass
 
-    def sample(self, steps=2000, nice_steps=1, batch_size=32):
+        # Add summary to Tensorboard
+        variable_summaries("v_loss", self.v_loss)
+        variable_summaries("g_loss", self.g_loss)
+        variable_summaries("d_loss", self.d_loss)
+        self.merged = tf.summary.merge_all()
+        self.jacobian = variable_stats('jacobian', self.j_)
+        self.train_writer = tf.summary.FileWriter(
+            self.path + '/train',
+            self.sess.graph)
+        self.test_writer = tf.summary.FileWriter(
+            self.path + '/test',
+            self.sess.graph)
+
+        # Add model saver
+        self.saver = tf.train.Saver()
+        self.sess.run(self.init_op)
+        self.ns = noise_sampler
+        self.ds = None
+
+    def sample(self, steps=2000, nice_steps=1, batch_size=32, iteration=None):
         start = time.time()
-        z, v = self.sess.run([self.z_, self.v_], feed_dict={
+        summ, z, v, j = self.sess.run([self.jacobian, self.z_, self.v_, self.j_], feed_dict={
             self.z: self.ns(batch_size), self.steps: steps, self.nice_steps: nice_steps})
         end = time.time()
         self.logger.info('%s: batches [%d] steps [%d : %d] time [%5.4f] samples/s [%5.4f]' %
                          (self.mode, batch_size, steps, nice_steps, end - start, (batch_size * steps) / (end - start)))
         z = np.transpose(z, axes=[1, 0, 2])
         v = np.transpose(v, axes=[1, 0, 2])
+        j = np.transpose(j, axes=[1, 0])
+        if iteration is not None:
+            self.test_writer.add_summary(summ, iteration)
         return z, v
 
     def bootstrap(self, steps=5000, nice_steps=1, burn_in=1000, batch_size=32, discard_ratio=0.5):
@@ -184,27 +204,33 @@ class Trainer(object):
                     steps=bootstrap_steps, burn_in=bootstrap_burn_in,
                     batch_size=bootstrap_batch_size, discard_ratio=bootstrap_discard_ratio
                 )
-                z, v = self.sample(evaluate_steps + evaluate_burn_in, nice_steps, evaluate_batch_size)
+                z, v = self.sample(evaluate_steps + evaluate_burn_in, nice_steps, evaluate_batch_size, t /epoch_size)
                 z, v = z[:, evaluate_burn_in:], v[:, evaluate_burn_in:]
                 self.energy_fn.evaluate([z, v], path=self.path)
-                self.save()
+                self.save(t / epoch_size)
             if t % log_freq == 0:
                 d_loss = self.sess.run(self.d_loss, feed_dict=_feed_dict(batch_size))
                 g_loss, v_loss = self.sess.run([self.g_loss, self.v_loss], feed_dict=_feed_dict(batch_size))
                 self.logger.info('Iter [%d] time [%5.4f] d_loss [%.4f] g_loss [%.4f] v_loss [%.4f]' %
                                  (t, train_time, d_loss, g_loss, v_loss))
             start = time.time()
-            for _ in range(0, d_iters):
-                self.sess.run(self.d_train, feed_dict=_feed_dict(batch_size))
-            self.sess.run(self.g_train, feed_dict=_feed_dict(batch_size))
+            for i in range(0, d_iters):
+                summary, _ =  self.sess.run([self.merged, self.d_train], feed_dict=_feed_dict(batch_size))
+                self.train_writer.add_summary(summary, (d_iters + 1) * t + i)
+
+            summary, _ = self.sess.run([self.merged, self.g_train], feed_dict=_feed_dict(batch_size))
+            self.train_writer.add_summary(summary, (d_iters + 1) * t + d_iters)
             end = time.time()
             train_time += end - start
 
-    def load(self):
-        # TODO: load model
-        raise NotImplementedError(str(type(self)))
+    def load(self, iteration):
+        self.saver.restore(
+            self.sess,
+            self.path + "/ckpt/model_" + str(iteration)+ ".ckpt")
+        print ('Model restored')
 
-    def save(self):
-        # TODO: Add proper path for saved model
-        save_path = self.saver.save(self.sess, "./model.ckpt")
+    def save(self, iteration):
+        save_path = self.saver.save(
+            self.sess,
+            self.path + "/ckpt/model_" + str(iteration)+ ".ckpt")
         print("Model saved in path: %s" % save_path)
