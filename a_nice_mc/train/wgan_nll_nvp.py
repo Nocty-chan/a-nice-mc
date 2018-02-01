@@ -6,7 +6,7 @@ import tensorflow as tf
 from a_nice_mc.utils.bootstrap import Buffer
 from a_nice_mc.utils.logger import create_logger
 from a_nice_mc.utils.nice import TrainingOperator, InferenceOperator
-
+from a_nice_mc.utils.summary import variable_summaries, variable_stats
 
 class Trainer(object):
     """
@@ -41,7 +41,8 @@ class Trainer(object):
         # Obtain values from inference ops
         # `infer_op` contains Metropolis step
         v = tf.random_normal(tf.stack([bz, self.v_dim]))
-        self.z_, self.v_ = self.infer_op((self.z, v), self.steps, self.nice_steps)
+        j = tf.zeros([tf.shape(self.z)[0]])
+        self.z_, self.v_, self.j_ = self.infer_op((self.z, v, j), self.steps, self.nice_steps)
 
         # Reshape for pairwise discriminator
         x = tf.reshape(self.x, [-1, 2 * self.x_dim])
@@ -97,15 +98,20 @@ class Trainer(object):
         ddx = tf.reduce_mean(tf.square(ddx - 1.0) * scale)
         self.d_loss = self.d_loss + ddx
 
+        # Add summary to Tensorboard
+        variable_summaries("v_loss", self.v_loss)
+        variable_summaries("g_loss", self.g_loss)
+        variable_summaries("d_loss", self.d_loss)
+
         # I don't have a good solution to the tf variable scope mess.
         # So I basically force the NiceLayer to contain the 'generator' scope.
         # See `nice/__init__.py`.
         g_vars = [var for var in tf.global_variables() if 'generator' in var.name]
         d_vars = [var for var in tf.global_variables() if discriminator.name in var.name]
 
-        self.d_train = tf.train.AdamOptimizer(learning_rate=5e-5, beta1=0.5, beta2=0.9)\
+        self.d_train = tf.train.AdamOptimizer(learning_rate=5e-4, beta1=0.5, beta2=0.9)\
             .minimize(self.d_loss, var_list=d_vars)
-        self.g_train = tf.train.AdamOptimizer(learning_rate=5e-5, beta1=0.5, beta2=0.9)\
+        self.g_train = tf.train.AdamOptimizer(learning_rate=5e-4, beta1=0.5, beta2=0.9)\
             .minimize(self.g_loss, var_list=g_vars)
 
         self.init_op = tf.group(
@@ -115,28 +121,38 @@ class Trainer(object):
 
         gpu_options = tf.GPUOptions(allow_growth=True)
         self.sess = tf.Session(config=tf.ConfigProto(
-            inter_op_parallelism_threads=1,
-            intra_op_parallelism_threads=1,
+            # inter_op_parallelism_threads=1,
+            # intra_op_parallelism_threads=1,
             gpu_options=gpu_options,
         ))
-        self.sess.run(self.init_op)
-        self.ns = noise_sampler
-        self.ds = None
+
         self.path = 'logs/' + self.mode +'_' + energy_fn.name
         try:
             os.makedirs(self.path)
         except OSError:
             pass
 
+        # Merge summaries
+        self.merged = tf.summary.merge_all()
+        self.train_writer = tf.summary.FileWriter(
+            self.path,
+            self.sess.graph)
+
+        self.ns = noise_sampler
+        self.ds = None
+        self.sess.run(self.init_op)
+
+
     def sample(self, steps=2000, nice_steps=1, batch_size=32):
         start = time.time()
-        z, v = self.sess.run([self.z_, self.v_], feed_dict={
+        z, v, j = self.sess.run([self.z_, self.v_, self.j_], feed_dict={
             self.z: self.ns(batch_size), self.steps: steps, self.nice_steps: nice_steps})
         end = time.time()
         self.logger.info('%s: batches [%d] steps [%d : %d] time [%5.4f] samples/s [%5.4f]' %
                          (self.mode, batch_size, steps, nice_steps, end - start, (batch_size * steps) / (end - start)))
         z = np.transpose(z, axes=[1, 0, 2])
         v = np.transpose(v, axes=[1, 0, 2])
+        j = np.transpose(j, axes=[1, 0])
         return z, v
 
     def bootstrap(self, steps=5000, nice_steps=1, burn_in=1000, batch_size=32, discard_ratio=0.5):
@@ -192,9 +208,12 @@ class Trainer(object):
                 self.logger.info('Iter [%d] time [%5.4f] d_loss [%.4f] g_loss [%.4f] v_loss [%.4f]' %
                                  (t, train_time, d_loss, g_loss, v_loss))
             start = time.time()
-            for _ in range(0, d_iters):
-                self.sess.run(self.d_train, feed_dict=_feed_dict(batch_size))
-            self.sess.run(self.g_train, feed_dict=_feed_dict(batch_size))
+            for i in range(0, d_iters):
+                summary, _ =  self.sess.run([self.merged, self.d_train], feed_dict=_feed_dict(batch_size))
+                self.train_writer.add_summary(summary, (d_iters + 1) * t + i)
+
+            summary, _ = self.sess.run([self.merged, self.g_train], feed_dict=_feed_dict(batch_size))
+            self.train_writer.add_summary(summary, (d_iters + 1) * t + d_iters)
             end = time.time()
             train_time += end - start
 

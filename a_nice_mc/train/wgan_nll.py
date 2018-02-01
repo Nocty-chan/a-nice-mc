@@ -6,7 +6,7 @@ import tensorflow as tf
 from a_nice_mc.utils.bootstrap import Buffer
 from a_nice_mc.utils.logger import create_logger
 from a_nice_mc.utils.nice import TrainingOperator, InferenceOperator
-
+from a_nice_mc.utils.summary import variable_summaries
 
 class Trainer(object):
     """
@@ -41,7 +41,8 @@ class Trainer(object):
         # Obtain values from inference ops
         # `infer_op` contains Metropolis step
         v = tf.random_normal(tf.stack([bz, self.v_dim]))
-        self.z_, self.v_ = self.infer_op((self.z, v), self.steps, self.nice_steps)
+        j = tf.zeros([tf.shape(self.z)[0]])
+        self.z_, self.v_, _ = self.infer_op((self.z, v, j), self.steps, self.nice_steps)
 
         # Reshape for pairwise discriminator
         x = tf.reshape(self.x, [-1, 2 * self.x_dim])
@@ -90,6 +91,8 @@ class Trainer(object):
         # discriminator loss
         self.d_loss = tf.reduce_mean(d) - tf.reduce_mean(d_)
 
+
+
         epsilon = tf.random_uniform([], 0.0, 1.0)
         x_hat = xl * epsilon + x_ * (1 - epsilon)
         d_hat = discriminator(x_hat)
@@ -98,6 +101,11 @@ class Trainer(object):
         ddx = tf.reduce_mean(tf.square(ddx - 1.0) * scale)
         self.d_loss = self.d_loss + ddx
 
+        # Add summary to Tensorboard
+        variable_summaries("v_loss", self.v_loss)
+        variable_summaries("g_loss", self.g_loss)
+        variable_summaries("d_loss", self.d_loss)
+        
         # I don't have a good solution to the tf variable scope mess.
         # So I basically force the NiceLayer to contain the 'generator' scope.
         # See `nice/__init__.py`.
@@ -120,15 +128,23 @@ class Trainer(object):
             intra_op_parallelism_threads=1,
             gpu_options=gpu_options,
         ))
-        self.saver = tf.train.Saver()
-        self.sess.run(self.init_op)
-        self.ns = noise_sampler
-        self.ds = None
+
         self.path = 'logs/' + self.mode +'_' + energy_fn.name
         try:
             os.makedirs(self.path)
         except OSError:
             pass
+
+        # Merge summaries
+        self.merged = tf.summary.merge_all()
+        self.train_writer = tf.summary.FileWriter(
+            self.path,
+            self.sess.graph)
+
+        self.saver = tf.train.Saver()
+        self.sess.run(self.init_op)
+        self.ns = noise_sampler
+        self.ds = None
 
     def sample(self, steps=2000, nice_steps=1, batch_size=32):
         start = time.time()
@@ -194,9 +210,12 @@ class Trainer(object):
                 self.logger.info('Iter [%d] time [%5.4f] d_loss [%.4f] g_loss [%.4f] v_loss [%.4f]' %
                                  (t, train_time, d_loss, g_loss, v_loss))
             start = time.time()
-            for _ in range(0, d_iters):
-                self.sess.run(self.d_train, feed_dict=_feed_dict(batch_size))
-            self.sess.run(self.g_train, feed_dict=_feed_dict(batch_size))
+            for i in range(0, d_iters):
+                summary, _ =  self.sess.run([self.merged, self.d_train], feed_dict=_feed_dict(batch_size))
+                self.train_writer.add_summary(summary, (d_iters + 1) * t + i)
+
+            summary, _ = self.sess.run([self.merged, self.g_train], feed_dict=_feed_dict(batch_size))
+            self.train_writer.add_summary(summary, (d_iters + 1) * t + d_iters)
             end = time.time()
             train_time += end - start
 

@@ -149,16 +149,18 @@ class InferenceOperator(object):
             (z_, v_), j_ = self.network([z, v], is_backward=is_backward) #(tf.random_uniform([]) < 0.5))
             return z_, v_, j_
 
-        def fn(zv, x):
+        def fn(zvj, x):
             """
             Transition with Metropolis-Hastings.
             `z` is the input state.
             `v` is created as a dummy variable to allow output of v_, for debugging purposes.
-            :param zv: [z, v]. It is written in this form merely to appeal to Python 3.
+            `j` jacobian evaluated at the preceding iteration.
+            :param zvj: [z, v, j]. It is written in this form merely to appeal to Python 3.
             :param x: variable only for specifying the number of steps
-            :return: next state `z_`, and the corresponding auxiliary variable `v_`.
+            :return: next state `z_`, and the corresponding auxiliary variable `v_`
+                     and determinant of jacobian j_.
             """
-            z, v = zv
+            z, v, _ = zvj
             v = tf.random_normal(shape=tf.stack([tf.shape(z)[0], self.network.v_dim]))
             # z_, v_ = self.network([z, v], is_backward=(tf.random_uniform([]) < 0.5))
             z_, v_, j_ = tf.scan(nice_proposal, x * tf.random_uniform([]), (z, v, tf.zeros([tf.shape(z)[0]])), back_prop=False)
@@ -167,7 +169,7 @@ class InferenceOperator(object):
             en = hamiltonian(z_, v_, self.energy_fn)
             accept = metropolis_hastings_accept(energy_prev=ep, energy_next=en, jacobian=j_)
             z_ = tf.where(accept, z_, z)
-            return z_, v_
+            return z_, v_, j_
 
         elems = tf.ones([steps, nice_steps])
         return tf.scan(fn, elems, inputs, back_prop=False)
