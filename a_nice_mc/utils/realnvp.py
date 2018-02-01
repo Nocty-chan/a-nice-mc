@@ -21,36 +21,37 @@ class NVPLayer(Layer):
         x_dim, v_dim = x.get_shape().as_list()[-1], v.get_shape().as_list()[-1]
         if self.swap:
             t = self.add(v, x_dim, 'translate', reuse=self.reuse)
-            s = self.add(v, x_dim, 'scale', reuse=self.reuse)
+            scale = self.get_scaling_fac('scaling', x_dim, reuse=self.reuse)
+            s = tf.multiply(scale, tf.tanh(self.add(v, x_dim, 'scale', reuse=self.reuse)))
             x = tf.multiply(x, tf.exp(s)) + t
-            # x = 1.1 * x + t
             return [x, v], tf.reduce_sum(s, 1)
-            # return [x,v], tf.ones([tf.shape(x)[0]])
         else:
             t = self.add(x, v_dim, 'translate', reuse=self.reuse)
-            s = self.add(x, v_dim, 'scale', reuse=self.reuse)
+            # Constraining s to be between -1 and 1 for stability
+            scale = self.get_scaling_fac('scaling', v_dim, reuse=self.reuse)
+            s = tf.multiply(scale, tf.tanh(self.add(x, v_dim, 'scale', reuse=self.reuse)))
             v = tf.multiply(v, tf.exp(s)) + t
-            # v = v + t
             return [x, v], tf.reduce_sum(s, 1)
-            # return [x,v], tf.zeros([tf.shape(x)[0]])
 
     def backward(self, inputs):
         x, v, = inputs
         x_dim, v_dim = x.get_shape().as_list()[-1], v.get_shape().as_list()[-1]
         if self.swap:
             t = self.add(v, x_dim, 'translate', reuse=True)
-            s = self.add(v, x_dim, 'scale', reuse=True)
+            scale = self.get_scaling_fac('scaling', x_dim, reuse=True)
+            s = tf.multiply(scale, tf.tanh(self.add(v, x_dim, 'scale', reuse=True)))
             x = tf.multiply(x - t, tf.exp(-s))
-            # x = x - t
             return [x, v], -tf.reduce_sum(s, 1)
-            # return [x,v], tf.zeros([tf.shape(x)[0]])
         else:
             t = self.add(x, v_dim, 'translate', reuse=True)
-            s = self.add(x, v_dim, 'scale', reuse=True)
+            scale = self.get_scaling_fac('scaling', v_dim, reuse=True)
+            s = tf.multiply(scale,tf.tanh(self.add(x, v_dim, 'scale', reuse=True)))
             v = tf.multiply(v - t, tf.exp(-s))
-            # v = v - t
-            # return [x,v], tf.zeros([tf.shape(x)[0]])
             return [x, v], -tf.reduce_sum(s, 1)
+
+    def get_scaling_fac(self, name, dim, reuse=False):
+        with tf.variable_scope(self.name, reuse=reuse):
+            return tf.get_variable(name, dtype=tf.float32, shape=(1, dim))
 
     def add(self, x, dx, name, reuse=False):
         dims = None
