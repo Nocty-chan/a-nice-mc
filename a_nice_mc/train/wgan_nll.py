@@ -120,6 +120,7 @@ class Trainer(object):
             intra_op_parallelism_threads=1,
             gpu_options=gpu_options,
         ))
+        self.saver = tf.train.Saver()
         self.sess.run(self.init_op)
         self.ns = noise_sampler
         self.ds = None
@@ -186,7 +187,7 @@ class Trainer(object):
                 z, v = self.sample(evaluate_steps + evaluate_burn_in, nice_steps, evaluate_batch_size)
                 z, v = z[:, evaluate_burn_in:], v[:, evaluate_burn_in:]
                 self.energy_fn.evaluate([z, v], path=self.path)
-                # TODO: save model
+                self.save()
             if t % log_freq == 0:
                 d_loss = self.sess.run(self.d_loss, feed_dict=_feed_dict(batch_size))
                 g_loss, v_loss = self.sess.run([self.g_loss, self.v_loss], feed_dict=_feed_dict(batch_size))
@@ -204,5 +205,6 @@ class Trainer(object):
         raise NotImplementedError(str(type(self)))
 
     def save(self):
-        # TODO: save model
-        raise NotImplementedError(str(type(self)))
+        # TODO: Add proper path for saved model
+        save_path = self.saver.save(self.sess, "./model.ckpt")
+        print("Model saved in path: %s" % save_path)
