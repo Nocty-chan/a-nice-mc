@@ -94,6 +94,8 @@ class Trainer(object):
         # discriminator loss
         self.d_loss = tf.reduce_mean(d) - tf.reduce_mean(d_)
 
+
+
         epsilon = tf.random_uniform([], 0.0, 1.0)
         x_hat = xl * epsilon + x_ * (1 - epsilon)
         d_hat = discriminator(x_hat)
@@ -101,6 +103,11 @@ class Trainer(object):
         ddx = tf.norm(ddx, axis=1)
         ddx = tf.reduce_mean(tf.square(ddx - 1.0) * scale)
         self.d_loss = self.d_loss + ddx
+
+        # Add summary to Tensorboard
+        variable_summaries("v_loss", self.v_loss)
+        variable_summaries("g_loss", self.g_loss)
+        variable_summaries("d_loss", self.d_loss)
 
         # I don't have a good solution to the tf variable scope mess.
         # So I basically force the NiceLayer to contain the 'generator' scope.
