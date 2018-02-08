@@ -138,13 +138,13 @@ class InferenceOperator(object):
             Nice Proposal (without Metropolis-Hastings).
             `z` is the input state.
             `v` is created as a dummy variable to allow output of v_, for debugging purposes.
-            `j` is the jacobian evaluated at the preceding iteration
+            `j` is the jacobian evaluated at the preceding iteration, for debugging purposes
             :param zv:
             :param x:
             :return: next state `z_`, and the corresponding auxiliary variable `v_' (without MH)
             and the jacobian value at (z,v)
             """
-            z, v, _ = zvj
+            z, v, j = zvj
             is_backward = (x < 0.5)
             (z_, v_), j_ = self.network([z, v], is_backward=is_backward) #(tf.random_uniform([]) < 0.5))
             return z_, v_, j_
@@ -154,16 +154,15 @@ class InferenceOperator(object):
             Transition with Metropolis-Hastings.
             `z` is the input state.
             `v` is created as a dummy variable to allow output of v_, for debugging purposes.
-            `j` jacobian evaluated at the preceding iteration.
+            `j` jacobian evaluated at the preceding iteration, for debugging purposes.
             :param zvj: [z, v, j]. It is written in this form merely to appeal to Python 3.
             :param x: variable only for specifying the number of steps
             :return: next state `z_`, and the corresponding auxiliary variable `v_`
                      and determinant of jacobian j_.
             """
-            z, v, _ = zvj
+            z, v, j = zvj
             v = tf.random_normal(shape=tf.stack([tf.shape(z)[0], self.network.v_dim]))
-            # z_, v_ = self.network([z, v], is_backward=(tf.random_uniform([]) < 0.5))
-            z_, v_, j_ = tf.scan(nice_proposal, x * tf.random_uniform([]), (z, v, tf.zeros([tf.shape(z)[0]])), back_prop=False)
+            z_, v_, j_ = tf.scan(nice_proposal, x * tf.random_uniform([]), (z, v, j), back_prop=False)
             z_, v_, j_ = z_[-1], v_[-1], j_[-1]
             ep = hamiltonian(z, v, self.energy_fn)
             en = hamiltonian(z_, v_, self.energy_fn)

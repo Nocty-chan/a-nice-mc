@@ -26,10 +26,10 @@ if __name__ == '__main__':
 
     data = np.load(args.path)
     if (len(data.shape) > 2):
-        data = data[0]
+        data = data[-1]
 
     fig, ax = plt.subplots()
-    ax.set_xlim((-8, 8))
+    ax.set_xlim((-10, 10))
     ax.set_ylim((-8, 8))
     sca, = ax.plot([], [], 'x')
     anim = animation.FuncAnimation(fig, animate, init_func=init, frames=args.frames, interval=args.interval, blit=True)

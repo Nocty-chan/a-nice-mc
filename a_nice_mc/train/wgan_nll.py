@@ -7,6 +7,7 @@ from a_nice_mc.utils.bootstrap import Buffer
 from a_nice_mc.utils.logger import create_logger
 from a_nice_mc.utils.nice import TrainingOperator, InferenceOperator
 from a_nice_mc.utils.summary import variable_summaries, variable_stats
+from a_nice_mc.utils.mmd import compute_mmd
 
 class Trainer(object):
     """
@@ -20,8 +21,9 @@ class Trainer(object):
     def __init__(self,
                  network, energy_fn, discriminator,
                  noise_sampler,
-                 b, m, eta=1.0, scale=10.0, mode='a-nice'):
+                 b, m, eta=1.0, scale=10.0, mode='a-nice', loss='gan'):
         self.mode = mode
+        self.losstype = loss
         self.energy_fn = energy_fn
         self.logger = create_logger(__name__)
         self.train_op = TrainingOperator(network)
@@ -81,11 +83,12 @@ class Trainer(object):
         d = discriminator(x, reuse=False)
         d_ = discriminator(x_)
 
-        # generator loss
+        # Generator Loss
+        if self.losstype == 'gan':
+            self.v_loss = tf.reduce_mean(0.5 * tf.multiply(v_, v_))
+        else:
+            self.v_loss = compute_mmd(v, v_)
 
-        # TODO: MMD loss (http://szhao.me/2017/06/10/a-tutorial-on-mmd-variational-autoencoders.html)
-        # it is easy to implement, but maybe we should wait after this codebase is settled.
-        self.v_loss = tf.reduce_mean(0.5 * tf.multiply(v_, v_))
         self.g_loss = tf.reduce_mean(d_) + self.v_loss * eta
 
         # discriminator loss
@@ -156,7 +159,6 @@ class Trainer(object):
                          (self.mode, batch_size, steps, nice_steps, end - start, (batch_size * steps) / (end - start)))
         z = np.transpose(z, axes=[1, 0, 2])
         v = np.transpose(v, axes=[1, 0, 2])
-        j = np.transpose(j, axes=[1, 0])
         if iteration is not None:
             self.test_writer.add_summary(summ, iteration)
         return z, v
@@ -175,7 +177,7 @@ class Trainer(object):
               d_iters=5, epoch_size=500, log_freq=100, max_iters=40000,
               bootstrap_steps=5000, bootstrap_burn_in=1000,
               bootstrap_batch_size=32, bootstrap_discard_ratio=0.5,
-              evaluate_steps=5000, evaluate_burn_in=1000, evaluate_batch_size=32, nice_steps=1):
+              evaluate_steps=5000, evaluate_burn_in=3000, evaluate_batch_size=32, nice_steps=1):
         """
         Train the NICE proposal using adversarial training.
         :param d_iters: number of discrtiminator iterations for each generator iteration

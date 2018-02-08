@@ -15,7 +15,7 @@ if __name__ == '__main__':
     from a_nice_mc.models.generator import create_mixed_network
     from a_nice_mc.train.wgan_nll import Trainer
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    #os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
     energy_fn = MixtureOfGaussians(display=False)
     discriminator = MLPDiscriminator([400, 400, 400])
@@ -28,5 +28,13 @@ if __name__ == '__main__':
         ]
     )
 
-    trainer = Trainer(generator, energy_fn, discriminator, noise_sampler, b=8, m=2, mode='real-nvp')
+    trainer = Trainer(
+        generator,
+        energy_fn,
+        discriminator,
+        noise_sampler,
+        b=8,
+        m=2,
+        mode='real-nvp',
+        loss='gan')
     trainer.train()
