@@ -15,8 +15,6 @@ if __name__ == '__main__':
     from a_nice_mc.models.generator import create_mixed_network
     from a_nice_mc.train.wgan_nll import Trainer
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-
     energy_fn = Ring2d(display=False)
     discriminator = MLPDiscriminator([400, 400, 400])
     generator = create_mixed_network(

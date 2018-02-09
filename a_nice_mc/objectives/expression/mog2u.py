@@ -19,7 +19,6 @@ class MixtureOfGaussians(Expression):
         super(MixtureOfGaussians, self).__init__(name=name, display=display)
         self.z = tf.placeholder(tf.float32, [None, 2], name='z')
 
-
     def __call__(self, z):
         z1 = tf.reshape(tf.slice(z, [0, 0], [-1, 1]), [-1])
         z2 = tf.reshape(tf.slice(z, [0, 1], [-1, 1]), [-1])
