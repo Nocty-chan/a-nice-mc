@@ -14,8 +14,10 @@ if __name__ == '__main__':
     from a_nice_mc.models.discriminator import MLPDiscriminator
     from a_nice_mc.models.generator import create_nice_network
     from a_nice_mc.train.wgan_nll import Trainer
-
-    energy_fn = MixtureOfGaussians(display=False)
+    mu = np.array([[-5, 0], [5, 0]])
+    sigma = np.array([[0.5, 0.5], [1, 1]])
+    p = np.array([0.5, 0.5]).reshape([2, 1])
+    energy_fn = MixtureOfGaussians(mu, sigma, p, display=False, name='mog2-unb')
     discriminator = MLPDiscriminator([400, 400, 400])
     generator = create_nice_network(
         2, 2,
