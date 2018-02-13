@@ -1,7 +1,6 @@
 # Script to visualise density of generated points
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 import argparse, os
