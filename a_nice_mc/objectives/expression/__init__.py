@@ -38,7 +38,6 @@ class Expression(Energy):
         if path:
             N, _ = data.shape
             D = self.means().shape[0]
-            print D
             transition = np.zeros([D, D])
             initial_class = get_class(data[0])
             initial_point = data[0]
