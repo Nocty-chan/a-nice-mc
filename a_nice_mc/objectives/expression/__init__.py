@@ -31,11 +31,48 @@ class Expression(Energy):
     def ylim():
         return None
 
+    def get_transition_matrix(self, data, path):
+        def get_class(point):
+            norms = np.sum((point-self.means())**2, axis=1)
+            return np.argmin(norms)
+        if path:
+            N, D = data.shape
+            transition = np.zeros([D, D])
+            initial_class = get_class(data[0])
+            initial_point = data[0]
+            for i in range(1, N):
+                new_class = get_class(data[i])
+                transition[initial_class][new_class] += 1
+                initial_class = new_class
+                initial_point = data[i]
+            # normalize
+            transition = transition / np.sum(transition, axis = -1).reshape([D, 1])
+            import matplotlib.pyplot as plt
+            import os
+            ## Plot transition matrix
+            fig_t, ax_t = plt.subplots()
+            figplot = ax_t.matshow(transition, interpolation='none', vmin=0, vmax=1)
+            plt.colorbar(figplot)
+            ind_array = np.arange(0, D, 1)
+            x, y = np.meshgrid(ind_array, ind_array)
+            for x_val in range(D):
+                for y_val in range(D):
+                    ax_t.text(x_val, y_val, transition[y_val][x_val], va='center', ha='center')
+            save_dir= path + '/density_plot/'
+            directory = os.path.dirname(save_dir)
+            try:
+                os.stat(directory)
+            except:
+                os.mkdir(directory)
+            fig_t.savefig(save_dir + 'transition.png')
+            print ("Saved transition in %s" % save_dir)
+
     def evaluate(self, zv, path=None):
         z, v = zv
         logger.info('Acceptance rate %.4f' % (acceptance_rate(z)))
         z = self.statistics(z)
         ess = effective_sample_size(z, self.mean(), self.std() * self.std(), logger=logger)
+        self.get_transition_matrix(z[-1], path)
         if path:
             save_ess(ess, path)
         self.visualize(zv, path)

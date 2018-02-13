@@ -22,7 +22,6 @@ class MixtureOfGaussians(Expression):
         self.p = p
         self.mean_value = None
         self.std_value = None
-        print self.modes
 
     def __call__(self, z):
         z1 = tf.reshape(tf.slice(z, [0, 0], [-1, 1]), [-1])
