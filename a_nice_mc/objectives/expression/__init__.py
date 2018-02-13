@@ -36,9 +36,13 @@ class Expression(Energy):
             norms = np.sum((point-self.means())**2, axis=1)
             return np.argmin(norms)
         if path:
+<<<<<<< HEAD
             N, _ = data.shape
             D = self.means().shape[0]
             print D
+=======
+            N, D = data.shape
+>>>>>>> 39a73f39b989deeeb3c770e5e4fc7b14d5adc138
             transition = np.zeros([D, D])
             initial_class = get_class(data[0])
             initial_point = data[0]
